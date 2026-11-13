@@ -1,0 +1,7 @@
+# Append this proxy to A's existing frpc.toml. Keep your frps address and authentication settings.
+[[proxies]]
+name = "worklink"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 41443
+remotePort = 41443

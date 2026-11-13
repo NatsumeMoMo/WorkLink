@@ -1,0 +1,35 @@
+﻿{
+    "binary":  "target/release/WorkLink.exe",
+    "binary_bytes":  8892928,
+    "duration_seconds":  30.009,
+    "connected":  true,
+    "processes":  [
+                      {
+                          "role":  "A daemon",
+                          "working_set_mib":  41.29,
+                          "private_mib":  6.41,
+                          "cpu_seconds":  0,
+                          "cpu_percent_one_core":  0,
+                          "threads":  7,
+                          "handles":  182
+                      },
+                      {
+                          "role":  "B daemon",
+                          "working_set_mib":  41.31,
+                          "private_mib":  6.46,
+                          "cpu_seconds":  0,
+                          "cpu_percent_one_core":  0,
+                          "threads":  8,
+                          "handles":  183
+                      },
+                      {
+                          "role":  "A tray",
+                          "working_set_mib":  44.22,
+                          "private_mib":  2.15,
+                          "cpu_seconds":  0,
+                          "cpu_percent_one_core":  0,
+                          "threads":  2,
+                          "handles":  165
+                      }
+                  ]
+}

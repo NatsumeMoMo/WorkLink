@@ -1,0 +1,12 @@
+/target/
+/dist/
+/releases/
+/test-artifacts/
+/data/
+*.pdb
+*.dpapi
+identity.key.*
+*.log
+.env
+.env.*
+!.env.example

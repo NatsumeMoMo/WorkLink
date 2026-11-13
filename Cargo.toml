@@ -1,0 +1,49 @@
+[package]
+name = "worklink"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Personal bidirectional SSH and file transfer over an authenticated encrypted connection"
+license = "MIT"
+
+[[bin]]
+name = "WorkLink"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+eframe = { version = "0.33", default-features = false, features = ["wgpu", "default_fonts"] }
+fs2 = "0.4"
+futures = "0.3"
+hex = "0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
+rand = "0.9"
+rcgen = { version = "0.14", default-features = false, features = ["ring", "pem"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-pemfile = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tempfile = "3"
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tokio-util = { version = "0.7", features = ["compat", "rt"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tray-icon = "0.24"
+uuid = { version = "1", features = ["v4", "serde"] }
+windows-service = "0.8"
+wgpu = { version = "27", default-features = false, features = ["std", "wgsl", "dx12"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Environment", "Win32_System_Memory", "Win32_System_Pipes", "Win32_System_RemoteDesktop", "Win32_System_Threading", "Win32_System_JobObjects", "Win32_System_IO", "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell", "Win32_UI_Controls_Dialogs"] }
+yamux = "0.13"
+zeroize = "1"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"
