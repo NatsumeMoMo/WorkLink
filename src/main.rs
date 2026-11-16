@@ -259,7 +259,6 @@ fn output(value: impl serde::Serialize) -> Result<()> {
 }
 
 fn main() {
-    platform::attach_console();
     let cli = Cli::parse();
     let gui = matches!(
         &cli.command,

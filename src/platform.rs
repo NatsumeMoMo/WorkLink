@@ -179,14 +179,6 @@ impl Drop for PipeSecurity {
     }
 }
 
-pub fn attach_console() {
-    unsafe {
-        if GetConsoleWindow().is_null() {
-            AttachConsole(ATTACH_PARENT_PROCESS);
-        }
-    }
-}
-
 pub fn detach_console() {
     // 保留控制台子系统让 PowerShell 正确等待 CLI，图形界面启动后再释放自己的控制台。
     unsafe {
