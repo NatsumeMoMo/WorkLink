@@ -289,6 +289,11 @@ fn encrypted_duplex_permissions_files_jobs_and_reconnect() {
     verify_forward(fa);
     verify_forward(fb);
     println!("PASS: simultaneous bidirectional binary SSH forwarding over one connection");
+    check_proxy_remote_eof(&fixture);
+    ok(
+        &fixture.a,
+        &["config", "--ssh-port", &echo_a.port.to_string()],
+    );
     let denied = call(
         &fixture.b,
         &[
@@ -903,6 +908,49 @@ fn check_real_openssh(fixture: &mut Fixture, forward_port: u16) {
             );
         }
     }
+}
+
+fn check_proxy_remote_eof(fixture: &Fixture) {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port().to_string();
+    ok(&fixture.a, &["config", "--ssh-port", &port]);
+    let server = thread::spawn(move || {
+        let (mut socket, _) = listener.accept().unwrap();
+        socket.write_all(b"remote-finished\n").unwrap();
+    });
+    let mut proxy = Command::new(exe())
+        .arg("--data-dir")
+        .arg(&fixture.b)
+        .args(["proxy", "--device", "A"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+    // 保留 stdin 写端，复现 SSH 已关闭远端、父进程却仍等代理退出的相互等待。
+    let _input = proxy.stdin.take().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        if let Some(status) = proxy.try_wait().unwrap() {
+            assert!(status.success());
+            break;
+        }
+        if Instant::now() >= deadline {
+            let _ = proxy.kill();
+            panic!("proxy did not exit after remote EOF with stdin still open");
+        }
+        thread::sleep(Duration::from_millis(50));
+    }
+    let mut output = String::new();
+    proxy
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut output)
+        .unwrap();
+    assert_eq!(output, "remote-finished\n");
+    server.join().unwrap();
+    println!("PASS: ProxyCommand exits after remote EOF while parent holds stdin open");
 }
 
 fn check_conpty(fixture: &Fixture) {

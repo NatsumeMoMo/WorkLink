@@ -297,31 +297,36 @@ pub async fn capture(
     let mut child = process.spawn().context("无法启动系统 OpenSSH 客户端")?;
     let out = child.stdout.take().unwrap();
     let err = child.stderr.take().unwrap();
-    let out_task = tokio::spawn(read_capped(out));
-    let err_task = tokio::spawn(read_capped(err));
-    if let Some(input) = stdin {
-        let mut pipe = child.stdin.take().unwrap();
-        pipe.write_all(input.as_bytes()).await?;
-        pipe.shutdown().await?;
-    }
-    let status = match tokio::time::timeout(Duration::from_secs(seconds), child.wait()).await {
-        Ok(status) => status?,
-        Err(error) => {
-            child.kill().await?;
-            out_task.abort();
-            err_task.abort();
-            return Err(error).context("SSH 操作超时；远端命令的最终状态需要核实");
+    let mut out_task = tokio::spawn(read_capped(out));
+    let mut err_task = tokio::spawn(read_capped(err));
+    let operation = async {
+        if let Some(input) = stdin {
+            let mut pipe = child.stdin.take().unwrap();
+            pipe.write_all(input.as_bytes()).await?;
+            pipe.shutdown().await?;
         }
+        let status = child.wait().await?;
+        let (stdout, out_truncated) = (&mut out_task).await??;
+        let (stderr, err_truncated) = (&mut err_task).await??;
+        Ok(CommandOutput {
+            backend: "ssh".into(),
+            exit_code: status.code(),
+            stdout,
+            stderr,
+            output_truncated: out_truncated || err_truncated,
+        })
     };
-    let (stdout, out_truncated) = out_task.await??;
-    let (stderr, err_truncated) = err_task.await??;
-    Ok(CommandOutput {
-        backend: "ssh".into(),
-        exit_code: status.code(),
-        stdout,
-        stderr,
-        output_truncated: out_truncated || err_truncated,
-    })
+    // 子进程退出后，代理仍可能持有输出句柄；超时必须包含 stdin 写入和输出收尾。
+    let result = tokio::time::timeout(Duration::from_secs(seconds), operation).await;
+    out_task.abort();
+    err_task.abort();
+    match result {
+        Ok(result) => result,
+        Err(error) => {
+            let _ = child.kill().await;
+            Err(error).context("SSH 操作超时；远端命令的最终状态需要核实")
+        }
+    }
 }
 
 async fn read_capped(mut input: impl AsyncRead + Unpin) -> Result<(String, bool)> {

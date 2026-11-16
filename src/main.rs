@@ -387,7 +387,13 @@ fn run(cli: Cli) -> Result<i32> {
         }
         Some(command) => {
             let runtime = runtime()?;
-            runtime.block_on(async_run(store, command, cli.json))
+            let reads_stdin = matches!(command, Commands::Proxy { .. } | Commands::Terminal { .. });
+            let result = runtime.block_on(async_run(store, command, cli.json));
+            if reads_stdin {
+                // SSH 结束时父进程可能仍持有 stdin；不能等待不可取消的控制台读取线程退出。
+                runtime.shutdown_timeout(std::time::Duration::from_millis(200));
+            }
+            result
         }
     }
 }
