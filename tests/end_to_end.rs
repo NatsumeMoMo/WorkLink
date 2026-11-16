@@ -511,7 +511,16 @@ fn encrypted_duplex_permissions_files_jobs_and_reconnect() {
     thread::sleep(Duration::from_secs(4));
     fixture.children.push(start(&fixture.b, &["daemon"]));
     wait_online(&fixture.b, true);
-    let recovered = ok(&fixture.b, &["job", "get", "A", id]);
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let recovered = loop {
+        let record = ok(&fixture.b, &["job", "get", "A", id]);
+        if record["state"] != "queued" && record["state"] != "running" {
+            break record;
+        }
+        // CI 主机的 PowerShell 冷启动时间不固定，按任务状态等待，避免把机器负载误判成断线丢任务。
+        assert!(Instant::now() < deadline, "job did not finish: {record}");
+        thread::sleep(Duration::from_millis(200));
+    };
     assert_eq!(recovered["state"], "completed");
     assert_eq!(fs::read_to_string(marker).unwrap().lines().count(), 1);
     println!(

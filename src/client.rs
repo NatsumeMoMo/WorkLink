@@ -275,6 +275,8 @@ pub async fn ssh_exec(
 ) -> Result<CommandOutput> {
     let peer = store.peer(peer_name)?;
     let mut process = ssh_command(store, &peer, user, true, false)?;
+    // 非交互命令不消费输入，显式禁用 OpenSSH stdin，避免嵌套 SSH 会话等待父会话输入。
+    process.arg("-n");
     process.arg(format!("worklink-{}", peer.id));
     process.arg("powershell.exe").args(powershell(command));
     capture(process, None, seconds).await
