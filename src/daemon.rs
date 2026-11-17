@@ -103,6 +103,18 @@ async fn serve(store: &Store, jobs: &Jobs, peer_id: &str, stream: &mut Stream) -
         None
     };
     match request {
+        Request::Automation {
+            background,
+            request,
+        } => {
+            ensure!(
+                peer.allow.browser || peer.allow.desktop,
+                "automation_permission_denied: 请先授予 browser 或 desktop 权限"
+            );
+            let value =
+                crate::automation::session::forward(store, peer_id, background, request).await?;
+            protocol::write_json(stream, &Reply::ok(value)).await?;
+        }
         Request::Ping => {
             protocol::write_json(stream, &Reply::ok(serde_json::json!({"version":1}))).await?
         }

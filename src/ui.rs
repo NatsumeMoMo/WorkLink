@@ -135,6 +135,7 @@ enum Event {
 #[derive(Clone, Copy, PartialEq)]
 enum Tab {
     Devices,
+    Automation,
     Files,
     Tasks,
     Pair,
@@ -174,6 +175,11 @@ struct App {
     entries: Vec<serde_json::Value>,
     overwrite: bool,
     job_id: String,
+    automation_url: String,
+    automation_tab: String,
+    automation_task: String,
+    automation_prompt: String,
+    automation_background: bool,
     screenshot: Option<std::path::PathBuf>,
     screenshot_frames: u32,
 }
@@ -221,6 +227,11 @@ impl App {
             entries: vec![],
             overwrite: false,
             job_id: String::new(),
+            automation_url: "https://chatgpt.com/".into(),
+            automation_tab: String::new(),
+            automation_task: String::new(),
+            automation_prompt: String::new(),
+            automation_background: false,
             screenshot: std::env::var_os("WORKLINK_SCREENSHOT").map(Into::into),
             screenshot_frames: 0,
         })
@@ -253,6 +264,12 @@ impl App {
                             self.output = serde_json::to_string_pretty(&value).unwrap_or_default();
                             if let Some(id) = value["spec"]["id"].as_str() {
                                 self.job_id = id.into();
+                            }
+                            if let Some(tab) = value["result"]["tab"].as_str() {
+                                self.automation_tab = tab.into();
+                            }
+                            if let Some(id) = value["id"].as_str() {
+                                self.automation_task = id.into();
                             }
                         }
                         Err(error) => self.message = error,
@@ -538,6 +555,8 @@ impl App {
                             ui.checkbox(&mut updated.allow.files, "原生文件");
                             ui.checkbox(&mut updated.allow.exec, "原生命令/终端");
                             ui.checkbox(&mut updated.allow.system, "SYSTEM");
+                            ui.checkbox(&mut updated.allow.browser, "浏览器");
+                            ui.checkbox(&mut updated.allow.desktop, "桌面控件与截图");
                         });
                         if updated.endpoint != peer.endpoint
                             || serde_json::to_string(&updated.allow).ok()
@@ -886,6 +905,131 @@ impl App {
                 );
             });
     }
+    fn automation(&mut self, ui: &mut egui::Ui) {
+        title(
+            ui,
+            "浏览器与桌面",
+            "远端浏览器使用远端网络与专用登录配置；桌面操作需要用户登录并解锁。",
+        );
+        let peers = self.store.read().map(|c| c.peers).unwrap_or_default();
+        ui.horizontal(|ui| {
+            ui.label("目标设备");
+            egui::ComboBox::from_id_salt("automation-target")
+                .selected_text(peers.get(self.peer).map_or("请选择", |p| p.name.as_str()))
+                .show_ui(ui, |ui| {
+                    for (i, p) in peers.iter().enumerate() {
+                        ui.selectable_value(&mut self.peer, i, &p.name);
+                    }
+                });
+            ui.checkbox(&mut self.automation_background, "后台浏览器（独立配置）");
+        });
+        ui.label(RichText::new("首次使用时，在目标电脑的 WorkLink 浏览器内人工登录。浏览器与桌面权限在设备页单独开启。").small().color(MUTED));
+        field(ui, "网址", &mut self.automation_url);
+        ui.add_enabled_ui(!self.busy, |ui| {
+            ui.horizontal(|ui| {
+                for (label, action) in [
+                    ("打开网页", Some(self.automation_url.clone())),
+                    ("浏览器状态", None),
+                    ("列出页面", None),
+                ] {
+                    if ui.button(label).clicked()
+                        && let Some(peer) = self.selected()
+                    {
+                        let mut args = vec!["browser".into(), peer.id];
+                        if self.automation_background {
+                            args.push("--background".into());
+                        }
+                        if let Some(url) = action {
+                            args.extend(["open".into(), url]);
+                        } else {
+                            args.push(
+                                if label == "列出页面" {
+                                    "tabs"
+                                } else {
+                                    "status"
+                                }
+                                .into(),
+                            );
+                        }
+                        self.cli_task(args);
+                    }
+                }
+                if ui.button("列出桌面窗口").clicked()
+                    && let Some(peer) = self.selected()
+                {
+                    self.cli_task(vec!["desktop".into(), peer.id, "windows".into()]);
+                }
+            });
+        });
+        field(ui, "页面 ID", &mut self.automation_tab);
+        ui.add_enabled_ui(!self.busy, |ui| {
+            ui.horizontal(|ui| {
+                for (label, action) in [
+                    ("页面控件", "snapshot"),
+                    ("读取正文", "text"),
+                    ("按需截图", "screenshot"),
+                ] {
+                    if ui.button(label).clicked()
+                        && let Some(peer) = self.selected()
+                    {
+                        let mut args = vec!["browser".into(), peer.id];
+                        if self.automation_background {
+                            args.push("--background".into());
+                        }
+                        args.extend([action.into(), self.automation_tab.clone()]);
+                        self.cli_task(args);
+                    }
+                }
+            });
+        });
+        ui.label("向当前网页提问（默认适配 ChatGPT 页面；提交后按任务 ID 查询）");
+        ui.add(
+            egui::TextEdit::multiline(&mut self.automation_prompt)
+                .desired_rows(2)
+                .desired_width(f32::INFINITY),
+        );
+        if ui
+            .add_enabled(
+                !self.busy && !self.automation_prompt.trim().is_empty(),
+                egui::Button::new("提交问题"),
+            )
+            .clicked()
+            && let Some(peer) = self.selected()
+        {
+            let mut args = vec!["browser".into(), peer.id];
+            if self.automation_background {
+                args.push("--background".into());
+            }
+            args.extend([
+                "--detach".into(),
+                "--timeout".into(),
+                "900".into(),
+                "ask".into(),
+                self.automation_tab.clone(),
+                self.automation_prompt.clone(),
+            ]);
+            self.cli_task(args);
+        }
+        field(ui, "自动化任务 ID", &mut self.automation_task);
+        ui.add_enabled_ui(!self.busy,|ui|{ui.horizontal(|ui|{
+            for(label,action)in[("查询任务","get"),("取消等待","cancel")] {
+                if ui.button(label).clicked()&&let Some(peer)=self.selected(){let mut args=vec!["tool".into(),peer.id];if self.automation_background{args.push("--background".into());}args.extend([action.into(),self.automation_task.clone()]);self.cli_task(args);}
+            }
+            if ui.button("复制 MCP 配置").clicked()&&let Ok(exe)=std::env::current_exe(){self.ctx.copy_text(serde_json::json!({"mcpServers":{"worklink":{"command":exe,"args":["--data-dir",self.store.root,"mcp"]}}}).to_string());self.message="已复制 MCP 配置，可用于 Cursor 等客户端".into();}
+        });});
+        ui.label(RichText::new("正文默认仅返回短预览；更多内容用 tool read 分页，图片用 tool download 保存。CLI 与 MCP 提供完整控件操作。").small().color(MUTED));
+        egui::ScrollArea::vertical()
+            .id_salt("automation-output")
+            .max_height(180.0)
+            .show(ui, |ui| {
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.output)
+                        .font(egui::TextStyle::Monospace)
+                        .desired_width(f32::INFINITY)
+                        .desired_rows(6),
+                );
+            });
+    }
     fn pair(&mut self, ui: &mut egui::Ui) {
         title(
             ui,
@@ -1072,6 +1216,7 @@ impl eframe::App for App {
                     (Tab::Devices, "设备"),
                     (Tab::Files, "文件"),
                     (Tab::Tasks, "终端与任务"),
+                    (Tab::Automation, "浏览器与桌面"),
                     (Tab::Pair, "配对"),
                     (Tab::Settings, "设置"),
                 ] {
@@ -1131,6 +1276,7 @@ impl eframe::App for App {
                             Tab::Devices => self.devices(ui),
                             Tab::Files => self.files(ui),
                             Tab::Tasks => self.tasks(ui),
+                            Tab::Automation => self.automation(ui),
                             Tab::Pair => self.pair(ui),
                             Tab::Settings => self.settings(ui),
                         }

@@ -76,7 +76,10 @@ fn powershell_cli_preserves_output_and_exit_status() {
         .unwrap();
     assert_eq!(result.status.code(), Some(1));
     let text = String::from_utf8_lossy(&result.stdout);
-    assert!(text.contains("WorkLink 0.1.0"), "{text}");
+    assert!(
+        text.contains(concat!("WorkLink ", env!("CARGO_PKG_VERSION"))),
+        "{text}"
+    );
     assert!(text.contains("\"ok\": false"), "{text}");
 }
 fn wait_online(root: &Path, online: bool) {
@@ -588,6 +591,34 @@ fn encrypted_duplex_permissions_files_jobs_and_reconnect() {
         "PASS: receiver restart reconnects automatically and marks unfinished tasks interrupted"
     );
     check_real_openssh(&mut fixture, fa);
+    assert!(
+        !call(&fixture.b, &["browser", "A", "--background", "status"])
+            .status
+            .success()
+    );
+    ok(&fixture.a, &["peer", "allow", "B", "--browser", "true"]);
+    ok(&fixture.b, &["peer", "allow", "A", "--browser", "true"]);
+    for (root, target) in [(&fixture.b, "A"), (&fixture.a, "B")] {
+        let state = ok(root, &["browser", target, "--background", "status"]);
+        assert_eq!(state["state"], "completed");
+        assert_eq!(state["result"]["running"], false);
+        let id = state["id"].as_str().unwrap();
+        assert_eq!(
+            ok(root, &["tool", target, "--background", "get", id]),
+            state
+        );
+    }
+    ok(&fixture.a, &["peer", "allow", "B", "--browser", "false"]);
+    assert!(
+        !call(&fixture.b, &["browser", "A", "--background", "status"])
+            .status
+            .success()
+    );
+    ok(&fixture.a, &["tool", "self", "--background", "stop"]);
+    ok(&fixture.b, &["tool", "self", "--background", "stop"]);
+    println!(
+        "PASS: bidirectional automation routing, default denial, explicit browser grant and revocation"
+    );
     let revoked_job = ok(
         &fixture.b,
         &[

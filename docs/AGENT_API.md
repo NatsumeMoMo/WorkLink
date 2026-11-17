@@ -1,5 +1,7 @@
 # WorkLink Agent 接口 v1
 
+v0.2 新增浏览器、桌面、持久自动化任务与 MCP，详见 [AUTOMATION.md](AUTOMATION.md)。自动化输出默认预算为 4000 字符/30 项，长正文按结果 ID 分页，图片显式下载。
+
 优先使用 CLI；不要操作 GUI，也不要读取或解密设备私钥。固定安装位置后，先执行 `WorkLink.exe --version` 和 `devices --json`，确认本机后台与目标在线。
 
 ## 调用约定
@@ -32,6 +34,10 @@
 | `forward <设备> --bind 127.0.0.1:22001` | 为客户端保持本机 SSH 转发入口 |
 | `ssh-config <设备> --user <用户名>` | 输出 SSH 配置，不自动修改用户文件 |
 | `peer ssh <设备> --user <用户> --identity <本机私钥路径> --known-hosts <本机文件>` | 保存该设备的本机 SSH 客户端设置；`--clear` 清除 |
+| `browser <设备> [--background] <status/open/tabs/snapshot/click/fill/press/text/wait/ask/screenshot/close>` | 使用目标网络和专用浏览器；`--id UUID`、`--detach`、`--timeout`、`--max-chars`、`--max-items` |
+| `desktop <设备> <windows/launch/snapshot/invoke/fill/focus/screenshot>` | 活动且解锁的所有者桌面 UIA |
+| `tool <设备> [--background] <get/cancel/read/download>` | 查询持久自动化任务、分页文本或校验下载图片 |
+| `mcp` | stdio MCP，5 个紧凑工具；GUI 可复制配置 |
 
 设备参数接受完整设备 ID 或不区分大小写的设备名。
 

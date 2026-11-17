@@ -16,6 +16,10 @@ pub struct Permissions {
     pub files: bool,
     pub exec: bool,
     pub system: bool,
+    #[serde(default)]
+    pub browser: bool,
+    #[serde(default)]
+    pub desktop: bool,
 }
 
 impl Default for Permissions {
@@ -25,6 +29,8 @@ impl Default for Permissions {
             files: false,
             exec: false,
             system: false,
+            browser: false,
+            desktop: false,
         }
     }
 }

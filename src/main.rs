@@ -1,3 +1,4 @@
+mod automation;
 mod client;
 mod config;
 mod daemon;
@@ -149,6 +150,15 @@ enum Commands {
     },
     Gui,
     Tray,
+    Browser(automation::cli::BrowserCli),
+    Desktop(automation::cli::DesktopCli),
+    Tool(automation::cli::ToolCli),
+    Mcp,
+    #[command(hide = true)]
+    Session {
+        #[arg(long)]
+        background: bool,
+    },
 }
 
 #[derive(Clone, Copy, PartialEq, ValueEnum)]
@@ -187,6 +197,10 @@ enum PeerCommand {
         exec: Option<bool>,
         #[arg(long)]
         system: Option<bool>,
+        #[arg(long)]
+        browser: Option<bool>,
+        #[arg(long)]
+        desktop: Option<bool>,
     },
     Ssh {
         device: String,
@@ -475,6 +489,8 @@ fn peer_command(store: &Store, command: PeerCommand) -> Result<()> {
             files,
             exec,
             system,
+            browser,
+            desktop,
         } => {
             let id = store.peer(&device)?.id;
             store.update(|cfg| {
@@ -491,6 +507,12 @@ fn peer_command(store: &Store, command: PeerCommand) -> Result<()> {
                 if let Some(v) = system {
                     peer.allow.system = v;
                 }
+                if let Some(v) = browser {
+                    peer.allow.browser = v;
+                }
+                if let Some(v) = desktop {
+                    peer.allow.desktop = v;
+                }
                 Ok(())
             })?;
             output(store.peer(&device)?)?;
@@ -501,6 +523,11 @@ fn peer_command(store: &Store, command: PeerCommand) -> Result<()> {
 
 async fn async_run(store: Store, command: Commands, json: bool) -> Result<i32> {
     match command {
+        Commands::Browser(args) => return automation::cli::browser(&store, args).await,
+        Commands::Desktop(args) => return automation::cli::desktop(&store, args).await,
+        Commands::Tool(args) => return automation::cli::tool(&store, args).await,
+        Commands::Mcp => automation::mcp::run(&store).await?,
+        Commands::Session { background } => automation::session::run(store, background).await?,
         Commands::Daemon => {
             let _logging = logging(&store)?;
             let stop = CancellationToken::new();

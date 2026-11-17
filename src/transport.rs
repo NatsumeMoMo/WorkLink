@@ -156,7 +156,7 @@ impl Manager {
                         links.retain(|id, link| {
                             let paired=cfg.peers.iter().find(|p|p.id==*id);
                             // 增加权限可以立即生效，收回权限才需要关闭已有会话。
-                            let keep=paired.is_some_and(|p|p.fingerprint==link.fingerprint&&(!link.allow.ssh||p.allow.ssh)&&(!link.allow.files||p.allow.files)&&(!link.allow.exec||p.allow.exec)&&(!link.allow.system||p.allow.system));
+                            let keep=paired.is_some_and(|p|p.fingerprint==link.fingerprint&&(!link.allow.ssh||p.allow.ssh)&&(!link.allow.files||p.allow.files)&&(!link.allow.exec||p.allow.exec)&&(!link.allow.system||p.allow.system)&&(!link.allow.browser||p.allow.browser)&&(!link.allow.desktop||p.allow.desktop));
                             if keep{link.allow=paired.unwrap().allow.clone();}
                             if !keep { link.cancel.cancel(); }
                             keep

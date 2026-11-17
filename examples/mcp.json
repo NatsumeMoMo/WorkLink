@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "worklink": {
+      "command": "D:\\Tools\\WorkLink.exe",
+      "args": ["--data-dir", "C:\\ProgramData\\WorkLink", "mcp"]
+    }
+  }
+}

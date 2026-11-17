@@ -9,6 +9,11 @@ pub const HANDSHAKE_SECONDS: u64 = 12;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Request {
+    Automation {
+        #[serde(default)]
+        background: bool,
+        request: crate::automation::Wire,
+    },
     Ping,
     Ssh,
     JobSubmit {

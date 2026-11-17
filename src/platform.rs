@@ -54,6 +54,169 @@ pub fn current_sid() -> Result<String> {
     }
 }
 
+pub fn session_id() -> Result<u32> {
+    let mut id = 0;
+    unsafe {
+        wincheck(ProcessIdToSessionId(GetCurrentProcessId(), &mut id))?;
+    }
+    Ok(id)
+}
+
+pub fn process_sid(pid: u32) -> Result<String> {
+    unsafe {
+        let process = Handle(OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid));
+        ensure!(!process.0.is_null(), "无法校验助手进程");
+        let mut token = null_mut();
+        wincheck(OpenProcessToken(process.0, TOKEN_QUERY, &mut token))?;
+        token_sid(token)
+    }
+}
+
+pub fn active_owner_session(owner: &str) -> Result<Option<u32>> {
+    unsafe {
+        let own = current_sid()?;
+        let current = session_id()?;
+        let mut entries = null_mut();
+        let mut count = 0;
+        wincheck(WTSEnumerateSessionsW(
+            WTS_CURRENT_SERVER_HANDLE,
+            0,
+            1,
+            &mut entries,
+            &mut count,
+        ))?;
+        let mut selected = None;
+        for entry in std::slice::from_raw_parts(entries, count as usize) {
+            if entry.State != WTSActive || entry.SessionId == 0 {
+                continue;
+            }
+            if own == owner && entry.SessionId == current {
+                selected = Some(current);
+                break;
+            }
+            if own == "S-1-5-18" {
+                let mut token = null_mut();
+                if WTSQueryUserToken(entry.SessionId, &mut token) != 0
+                    && token_sid(token).is_ok_and(|sid| sid == owner)
+                {
+                    selected = Some(entry.SessionId);
+                    break;
+                }
+            }
+        }
+        WTSFreeMemory(entries.cast());
+        Ok(selected)
+    }
+}
+
+pub fn launch_session_helper(
+    store: &crate::config::Store,
+    owner: &str,
+    background: bool,
+) -> Result<()> {
+    let exe = std::env::current_exe()?;
+    let args = vec![
+        "--data-dir".to_string(),
+        store.root.to_string_lossy().into_owned(),
+        "session".into(),
+    ];
+    if current_sid()? != "S-1-5-18" {
+        ensure!(
+            current_sid()? == owner,
+            "helper_wrong_user: 无法启动其他用户的助手"
+        );
+        // 助手比 CLI 活得更久，不能继承调用方的输出管道，否则 Agent 会一直等不到 EOF。
+        unsafe {
+            let mut arguments = vec![exe.to_string_lossy().into_owned()];
+            arguments.extend(args);
+            if background {
+                arguments.push("--background".into());
+            }
+            let mut command = wide(
+                arguments
+                    .iter()
+                    .map(|s| quote_arg(s))
+                    .collect::<Vec<_>>()
+                    .join(" "),
+            );
+            let mut startup: STARTUPINFOW = zeroed();
+            startup.cb = size_of::<STARTUPINFOW>() as u32;
+            let mut info: PROCESS_INFORMATION = zeroed();
+            wincheck(CreateProcessW(
+                null(),
+                command.as_mut_ptr(),
+                null(),
+                null(),
+                0,
+                CREATE_NO_WINDOW,
+                null(),
+                null(),
+                &startup,
+                &mut info,
+            ))?;
+            drop(Handle(info.hProcess));
+            drop(Handle(info.hThread));
+        }
+        return Ok(());
+    }
+    unsafe {
+        let token = execution_token(owner, false)?;
+        let session = if background {
+            0
+        } else {
+            active_owner_session(owner)?
+                .ok_or_else(|| anyhow::anyhow!("session_unavailable: 所有者没有活动桌面"))?
+        };
+        wincheck(SetTokenInformation(
+            token.0,
+            TokenSessionId,
+            (&session as *const u32).cast(),
+            4,
+        ))?;
+        // UI 助手保留真实用户会话和桌面，不能沿用普通后台任务强制切到 Session 0 的启动方式。
+        let desktop = wide("winsta0\\default");
+        let mut startup: STARTUPINFOW = zeroed();
+        startup.cb = size_of::<STARTUPINFOW>() as u32;
+        if !background {
+            startup.lpDesktop = desktop.as_ptr() as *mut u16;
+        }
+        let mut environment = null_mut();
+        wincheck(CreateEnvironmentBlock(&mut environment, token.0, 0))?;
+        let mut arguments = vec![exe.to_string_lossy().into_owned()];
+        arguments.extend(args);
+        if background {
+            arguments.push("--background".into());
+        }
+        let mut command = wide(
+            arguments
+                .iter()
+                .map(|s| quote_arg(s))
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
+        let mut info: PROCESS_INFORMATION = zeroed();
+        let launched = CreateProcessAsUserW(
+            token.0,
+            null(),
+            command.as_mut_ptr(),
+            null(),
+            null(),
+            0,
+            CREATE_UNICODE_ENVIRONMENT | CREATE_NO_WINDOW,
+            environment,
+            null(),
+            &startup,
+            &mut info,
+        );
+        let error = std::io::Error::last_os_error();
+        DestroyEnvironmentBlock(environment);
+        ensure!(launched != 0, "helper_launch_failed: {error}");
+        drop(Handle(info.hProcess));
+        drop(Handle(info.hThread));
+        Ok(())
+    }
+}
+
 fn token_sid(token: HANDLE) -> Result<String> {
     unsafe {
         let guard = Handle(token);
