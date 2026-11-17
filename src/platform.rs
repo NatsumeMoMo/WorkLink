@@ -531,10 +531,10 @@ impl Attributes {
     fn new() -> Result<Self> {
         unsafe {
             let mut size = 0;
-            InitializeProcThreadAttributeList(null_mut(), 1, 0, &mut size);
+            InitializeProcThreadAttributeList(null_mut(), 2, 0, &mut size);
             let mut memory = vec![0usize; size.div_ceil(size_of::<usize>())];
             let ptr = memory.as_mut_ptr().cast();
-            wincheck(InitializeProcThreadAttributeList(ptr, 1, 0, &mut size))?;
+            wincheck(InitializeProcThreadAttributeList(ptr, 2, 0, &mut size))?;
             Ok(Self {
                 _memory: memory,
                 ptr,
@@ -628,6 +628,27 @@ pub fn spawn_process(
         child_error.as_raw_handle(),
     ];
     unsafe {
+        let job = Handle(CreateJobObjectW(null(), null()));
+        ensure!(!job.0.is_null(), "无法创建进程 Job Object");
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        wincheck(SetInformationJobObject(
+            job.0,
+            JobObjectExtendedLimitInformation,
+            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+            size_of_val(&limits) as u32,
+        ))?;
+        // 创建进程时就绑定 Job，避免后台恰好崩溃在创建与绑定之间，留下永远挂起的子进程。
+        let job_list = [job.0];
+        wincheck(UpdateProcThreadAttribute(
+            attributes.ptr,
+            0,
+            PROC_THREAD_ATTRIBUTE_JOB_LIST as usize,
+            job_list.as_ptr().cast(),
+            size_of_val(&job_list),
+            null_mut(),
+            null(),
+        ))?;
         for file in [&input, &output, &error] {
             wincheck(SetHandleInformation(
                 file.as_raw_handle(),
@@ -769,24 +790,6 @@ pub fn spawn_process(
         }
         let process = Handle(info.hProcess);
         let thread = Handle(info.hThread);
-        let job = Handle(CreateJobObjectW(null(), null()));
-        if job.0.is_null() {
-            TerminateProcess(process.0, 1);
-            bail!("无法创建进程 Job Object");
-        }
-        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = zeroed();
-        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        if SetInformationJobObject(
-            job.0,
-            JobObjectExtendedLimitInformation,
-            (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
-            size_of_val(&limits) as u32,
-        ) == 0
-            || AssignProcessToJobObject(job.0, process.0) == 0
-        {
-            TerminateProcess(process.0, 1);
-            bail!("无法限制任务进程树：{}", std::io::Error::last_os_error());
-        }
         ensure!(ResumeThread(thread.0) != u32::MAX, "无法启动任务线程");
         drop(child_input);
         drop(child_output);

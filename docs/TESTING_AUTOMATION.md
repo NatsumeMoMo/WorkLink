@@ -30,9 +30,12 @@ py -3 scripts/test-automation.py --exe target/release/WorkLink.exe --desktop
 | 浏览器截图 | 约 93 KB JPEG，下载 SHA-256 一致，普通结果无图片 Base64 |
 | 两方向桌面自动化 | 两端自建 WinForms 窗口均完成枚举、快照、填入、点击、截图和下载 |
 | 执行中撤回 browser 授权 | 在运行任务停止，恢复授权后可查询 cancelled |
+| 通道强制断开约 11 秒 | A 继续完成网页回答，恢复连接按原 ID 查询成功，重复 ID 未再次发送 |
 | SSH 回归 | 自动化测试后原 SSH 命令仍成功 |
 
 公网测试发现并修正了仅在服务启动环境出现的问题：headless 助手原先被强制放入 Session 0，Edge 能启动但页面渲染超时。保留所有者会话与桌面后，两方向的真实浏览器检查通过。没有关闭浏览器沙箱来绕过问题。
+
+进程检查还发现旧原生任务在后台被强制终止时，可能在创建进程与绑定 Job Object 之间遗留挂起进程。改为通过 Windows 进程属性在创建时原子绑定 Job，并增加后台崩溃后不存在 PowerShell 子进程的断言。
 
 ## 验证边界
 

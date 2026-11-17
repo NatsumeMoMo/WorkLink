@@ -578,9 +578,23 @@ fn encrypted_duplex_permissions_files_jobs_and_reconnect() {
         ],
     );
     let interrupted_id = interrupted["spec"]["id"].as_str().unwrap();
+    let crashed_pid = fixture.children[0].id();
     fixture.children[0].kill().unwrap();
     fixture.children[0].wait().unwrap();
     wait_online(&fixture.b, false);
+    let probe = format!(
+        "(Get-CimInstance Win32_Process -Filter 'ParentProcessId={crashed_pid}' | Where-Object Name -eq 'powershell.exe' | Measure-Object).Count"
+    );
+    let children = Command::new("powershell.exe")
+        .args(["-NoProfile", "-NonInteractive", "-Command", &probe])
+        .output()
+        .unwrap();
+    assert!(children.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&children.stdout).trim(),
+        "0",
+        "daemon crash left a suspended task process"
+    );
     fixture.children.push(start(&fixture.a, &["daemon"]));
     wait_online(&fixture.b, true);
     assert_eq!(
