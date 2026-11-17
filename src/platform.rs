@@ -161,25 +161,22 @@ pub fn launch_session_helper(
     }
     unsafe {
         let token = execution_token(owner, false)?;
-        let session = if background {
-            0
-        } else {
-            active_owner_session(owner)?
-                .ok_or_else(|| anyhow::anyhow!("session_unavailable: 所有者没有活动桌面"))?
-        };
-        wincheck(SetTokenInformation(
-            token.0,
-            TokenSessionId,
-            (&session as *const u32).cast(),
-            4,
-        ))?;
+        if !background {
+            let session = active_owner_session(owner)?
+                .ok_or_else(|| anyhow::anyhow!("session_unavailable: 所有者没有活动桌面"))?;
+            wincheck(SetTokenInformation(
+                token.0,
+                TokenSessionId,
+                (&session as *const u32).cast(),
+                4,
+            ))?;
+        }
         // UI 助手保留真实用户会话和桌面，不能沿用普通后台任务强制切到 Session 0 的启动方式。
         let desktop = wide("winsta0\\default");
         let mut startup: STARTUPINFOW = zeroed();
         startup.cb = size_of::<STARTUPINFOW>() as u32;
-        if !background {
-            startup.lpDesktop = desktop.as_ptr() as *mut u16;
-        }
+        // headless 也保留所有者会话；切到 Session 0 会使部分 Chromium 渲染进程无法正常启动。
+        startup.lpDesktop = desktop.as_ptr() as *mut u16;
         let mut environment = null_mut();
         wincheck(CreateEnvironmentBlock(&mut environment, token.0, 0))?;
         let mut arguments = vec![exe.to_string_lossy().into_owned()];

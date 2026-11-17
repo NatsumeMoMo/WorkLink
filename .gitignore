@@ -4,6 +4,8 @@
 /test-artifacts/
 /data/
 *.pdb
+__pycache__/
+*.pyc
 *.dpapi
 identity.key.*
 *.log

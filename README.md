@@ -8,7 +8,7 @@ Windows 11 上的个人远程工作台。以现有 SSH/SFTP 客户端为主，�
 
 构建后的程序位于 `dist\WorkLink.exe`。双击打开中文工作台；关闭窗口后释放 GUI，原生托盘和后台可以继续运行。双击托盘重新打开界面。
 
-程序面向 Windows 11 x64，以单个 EXE 分发，不依赖 .NET、WebView2 或另装 VC++ 运行库。SSH/SFTP 功能使用 Windows 已安装的 OpenSSH 客户端；原生兜底不依赖 SSH。
+程序面向 Windows 11 x64，以单个 EXE 分发，不需要另装 .NET、WebView2 或 VC++ 运行库。SSH/SFTP 功能使用 Windows 已安装的 OpenSSH 客户端；原生兜底不依赖 SSH。
 
 浏览器自动化使用已安装的 Edge/Chrome 与独立持久登录配置；桌面自动化使用 Windows 自带 PowerShell 和 .NET Framework 的 UI Automation，无需另外下载运行时。新能力默认关闭授权，详细使用、Token 预算、限制和 MCP 配置见 [浏览器、桌面与 MCP](docs/AUTOMATION.md)。
 
