@@ -36,6 +36,7 @@ v0.2 新增浏览器、桌面、持久自动化任务与 MCP，详见 [AUTOMATIO
 | `peer ssh <设备> --user <用户> --identity <本机私钥路径> --known-hosts <本机文件>` | 保存该设备的本机 SSH 客户端设置；`--clear` 清除 |
 | `browser <设备> [--background] <status/open/tabs/snapshot/click/fill/press/text/wait/ask/screenshot/close>` | 使用目标网络和专用浏览器；`--id UUID`、`--detach`、`--timeout`、`--max-chars`、`--max-items` |
 | `desktop <设备> <windows/launch/snapshot/invoke/fill/focus/screenshot>` | 活动且解锁的所有者桌面 UIA |
+| `desktop <设备> ask-chatgpt --prompt <问题> [--model Pro]` | 复用目标普通 Edge 的 ChatGPT 登录态，可用 `--conversation` 显式续聊 |
 | `tool <设备> [--background] <get/cancel/read/download>` | 查询持久自动化任务、分页文本或校验下载图片 |
 | `mcp` | stdio MCP，5 个紧凑工具；GUI 可复制配置 |
 

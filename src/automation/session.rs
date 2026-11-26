@@ -229,7 +229,7 @@ impl Host {
                                     }
                                     .into();
                                 current.view.error = Some(
-                                    json!({"code":code,"message":message,"may_have_applied":current.mutates&&current.view.phase!="queued"}),
+                                    json!({"code":code,"message":message,"may_have_applied":current.mutates&&!matches!(current.view.phase.as_str(),"queued"|"starting"|"preparing_edge")}),
                                 );
                             }
                         }
@@ -289,7 +289,7 @@ impl Host {
         record.view.phase = "starting".into();
         self.save(&record)?;
         let operation = async {
-            if action.mutates() {
+            if action.mutates() && !matches!(action, Action::DesktopEdgeAsk { .. }) {
                 ctx.phase("applying").await?;
             }
             if action.capability() == "browser" {

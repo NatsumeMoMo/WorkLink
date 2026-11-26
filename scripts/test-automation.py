@@ -101,7 +101,14 @@ def main():
         responses=[json.loads(line) for line in p.stdout.splitlines()];assert len(responses)==3 and len(responses[1]['result']['tools'])==5
         assert not responses[2]['result']['isError'] and 'structuredContent' not in responses[2]['result']
         check('MCP initialization/catalog/call and single compact response')
-        if args.desktop:desktop_test(raw,root,check)
+        if args.desktop:
+            desktop_test(raw, root, check)
+            rejected = raw('desktop', 'self', 'ask-chatgpt', '--prompt', 'local regression',
+                           '--conversation', 'https://example.com/c/00000000-0000-4000-8000-000000000000',
+                           success=False)
+            assert rejected['error']['code'] == 'invalid_conversation', rejected
+            assert rejected['error']['may_have_applied'] is False, rejected
+            check('Edge worker receives its first request and rejects foreign conversation URLs before submission')
         print(json.dumps({'passed':len(checks),'checks':checks},ensure_ascii=False),flush=True)
     finally:
         cleanup=[('browser','self','--background','close'),('tool','self','--background','stop')]

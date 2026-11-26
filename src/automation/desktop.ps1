@@ -36,6 +36,10 @@ function Reference([string]$key,[string]$peer){
 function Invoke-Desktop($r){
  Check-Desktop
  switch($r.kind){
+  'edge_prepare' { return Edge-Prepare $r }
+  'edge_send' { return Edge-Send $r }
+  'edge_probe' { return Edge-Probe }
+  'edge_result' { return $script:edgeChatTask.result }
   'desktop_windows' {
    $items=@();$used=100;$all=[Windows.Automation.AutomationElement]::RootElement.FindAll([Windows.Automation.TreeScope]::Children,[Windows.Automation.Condition]::TrueCondition)
    foreach($element in $all){
@@ -117,6 +121,9 @@ function Invoke-Desktop($r){
   }
   default{throw 'unsupported_desktop_action'}
  }
+}
+if (Get-Command Edge-Prepare -CommandType Function -ErrorAction SilentlyContinue) {
+ [Console]::WriteLine('WORKLINK_EDGE_READY')
 }
 while($null -ne ($line=[Console]::ReadLine())){
  try{$request=$line|ConvertFrom-Json;$data=Invoke-Desktop $request;$response=@{ok=$true;data=$data}}

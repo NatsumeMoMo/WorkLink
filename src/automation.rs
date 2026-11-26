@@ -121,6 +121,12 @@ pub enum Action {
     DesktopScreenshot {
         window: i64,
     },
+    DesktopEdgeAsk {
+        prompt: String,
+        model: Option<String>,
+        window: Option<i64>,
+        conversation: Option<String>,
+    },
 }
 impl Action {
     pub fn capability(&self) -> &'static str {
@@ -131,7 +137,8 @@ impl Action {
             | Self::DesktopInvoke { .. }
             | Self::DesktopFill { .. }
             | Self::DesktopFocus { .. }
-            | Self::DesktopScreenshot { .. } => "desktop",
+            | Self::DesktopScreenshot { .. }
+            | Self::DesktopEdgeAsk { .. } => "desktop",
             _ => "browser",
         }
     }
@@ -148,6 +155,7 @@ impl Action {
                 | Self::DesktopInvoke { .. }
                 | Self::DesktopFill { .. }
                 | Self::DesktopFocus { .. }
+                | Self::DesktopEdgeAsk { .. }
         )
     }
 }

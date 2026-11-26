@@ -177,10 +177,29 @@ pub enum DesktopCommand {
     Screenshot {
         window: i64,
     },
+    /// 在已打开的普通 Edge 中使用现有登录态向 ChatGPT 提问
+    AskChatgpt {
+        #[arg(
+            long,
+            conflicts_with = "prompt_file",
+            required_unless_present = "prompt_file"
+        )]
+        prompt: Option<String>,
+        #[arg(long, value_name = "UTF8_FILE")]
+        prompt_file: Option<PathBuf>,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        window: Option<i64>,
+        #[arg(long)]
+        conversation: Option<String>,
+    },
 }
-impl From<DesktopCommand> for Action {
-    fn from(value: DesktopCommand) -> Self {
-        match value {
+impl TryFrom<DesktopCommand> for Action {
+    type Error = anyhow::Error;
+
+    fn try_from(value: DesktopCommand) -> Result<Self> {
+        Ok(match value {
             DesktopCommand::Windows => Self::DesktopWindows,
             DesktopCommand::Launch { program, args } => Self::DesktopLaunch { program, args },
             DesktopCommand::Snapshot { window, offset } => Self::DesktopSnapshot { window, offset },
@@ -188,7 +207,29 @@ impl From<DesktopCommand> for Action {
             DesktopCommand::Fill { reference, text } => Self::DesktopFill { reference, text },
             DesktopCommand::Focus { window } => Self::DesktopFocus { window },
             DesktopCommand::Screenshot { window } => Self::DesktopScreenshot { window },
-        }
+            DesktopCommand::AskChatgpt {
+                prompt,
+                prompt_file,
+                model,
+                window,
+                conversation,
+            } => {
+                let prompt = if let Some(path) = prompt_file {
+                    ensure!(std::fs::metadata(&path)?.len() <= 32771, "prompt_too_large");
+                    std::fs::read_to_string(path)?
+                        .trim_start_matches('\u{feff}')
+                        .to_owned()
+                } else {
+                    prompt.context("prompt_required")?
+                };
+                Self::DesktopEdgeAsk {
+                    prompt,
+                    model,
+                    window,
+                    conversation,
+                }
+            }
+        })
     }
 }
 #[derive(Args)]
@@ -323,7 +364,7 @@ pub async fn desktop(store: &Store, args: DesktopCli) -> Result<i32> {
         store,
         &args.device,
         &args.options,
-        args.action.into(),
+        args.action.try_into()?,
         args.options.timeout.saturating_add(15).saturating_mul(1000),
     )
     .await?;

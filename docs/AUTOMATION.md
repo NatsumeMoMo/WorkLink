@@ -1,4 +1,4 @@
-# 浏览器、桌面与 MCP（v0.2）
+# 浏览器、桌面与 MCP
 
 WorkLink 可以从 B 操作 A 的专用浏览器、使用 A 的网络加载网页、提取回答，并操作 A 当前用户桌面的 UI Automation 控件。两个方向使用已有 TLS 双向认证长连接和同一个公网端口；无需开放 CDP、WebDriver、RDP 等公网入口。
 
@@ -64,6 +64,25 @@ ask 默认使用 ChatGPT 的输入、发送、assistant 消息和生成状态标
 read 的偏移与长度按 Unicode 字符，搜索最多返回 10 个匹配片段。图片按需生成 JPEG，最长限制为 1280×900，普通工具响应不含 Base64。download 内部分块读取并校验 SHA-256，成功后原子保存，拒绝覆盖现有文件。桌面截图捕获窗口所在屏幕区域，窗口应无遮挡；它不保证能获取被其它窗口覆盖的内容。
 
 结果按发起设备隔离，每项最大 2 MiB，24 小时过期，总计最多 200 项/128 MiB，容量回收可能提前使旧结果失效。结果与浏览器 profile 存在受保护的数据目录；其内容可能含登录态或网页数据，不应提交 Git。`source_truncated` 表示源内容触及截取上限。
+
+## 使用已经登录的普通 Edge 向 ChatGPT 提问
+
+WorkLink v0.3 的 `desktop <设备> ask-chatgpt` 在目标电脑已打开的 Edge 配置中新增标签页，沿用该配置的 ChatGPT 登录态。默认开始新对话并沿用新对话页显示的模型。目标电脑需要允许发起设备的 `desktop` 权限，所有者保持登录且解锁，并打开普通 Edge 窗口。
+
+```powershell
+$id = [guid]::NewGuid().ToString()
+.\WorkLink.exe desktop A ask-chatgpt --prompt '请用三点概括这个问题' --model Pro --id $id --timeout 900 --detach
+.\WorkLink.exe tool A get $id --wait-ms 30000
+```
+
+含有多行、引号或代码的长问题可以用 `--prompt-file <UTF8文件>`。省略 `--model` 时使用页面当前模型。可以传 `Pro`、`Thinking`、`Instant`、`Auto` 或网页上的模型名。页面可选且能够确认时会选择指定模型，发送前会再次核对。若选项不可用或 UIA 无法确认，任务会返回原因，用户可在 Edge 手动选择后处理。
+
+- `edge_window_ambiguous` 会返回候选窗口句柄。用 `desktop A windows` 核对窗口，再显式传 `--window <句柄>`。若 Edge 把新标签交给同一配置的另一个窗口，请激活目标窗口后重试。
+- 继续对话须传 `--conversation <上次结果中的 conversation>`，新标签内打开这个对话。现有草稿、已在生成的回答和提交前变更的标签会阻止发送。
+- 等待期间保持任务的 ChatGPT 标签选中。结果包含发送时核实的 `model`、`conversation`、`window`、短文本预览和 `result_id`。只需结论时缩小 `--max-chars`，更多内容用 `tool A read <result_id> --offset <next_offset> --limit 1500`。
+- 任务进入 `submission_started` 或 `waiting_for_answer` 后，断线、超时或取消时先查原 ID 和目标会话。相同 ID 与原参数对应同一任务，结果无法确认时避免换新 ID 重发。
+
+MCP 使用 `worklink_desktop`，例如 `{"device":"A","id":"<UUID>","timeout":900,"wait_ms":1000,"action":{"kind":"desktop_edge_ask","prompt":"请用三点概括","model":"Pro"}}`。后续用 `worklink_task` 查询和 `worklink_result` 分页读取。此入口通过 Windows UI Automation 操作网页，具体模型和控件能否识别取决于 ChatGPT 页面版本。
 
 ## 桌面控件
 
