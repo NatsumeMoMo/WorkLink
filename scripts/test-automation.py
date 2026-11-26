@@ -17,7 +17,7 @@ PAGE = '''<!doctype html><meta charset="utf-8"><title>WorkLink fixture</title>
 <div id="answers"></div><div id="long"></div><div id="controls"></div></main>
 <script>
 let submissions=0;
-document.querySelector('#long').innerText=('Unicode 中文🙂 evidence line.\\n').repeat(1200);
+document.querySelector('#long').innerText=('Unicode 中文🙂 evidence line.\\n').repeat(3000);
 for(let i=0;i<80;i++){let b=document.createElement('button');b.textContent='Extra '+i;document.querySelector('#controls').append(b);}
 async function ask(){submissions++;document.body.dataset.submissions=submissions;
 let input=document.querySelector('textarea');let prompt=input.value;input.value='';
@@ -76,6 +76,13 @@ def main():
         page=raw('tool','self','--background','read',text['result_id'],'--offset',str(text['next_offset']),'--limit','37');assert len(page['text'])==37
         search=raw('tool','self','--background','read',text['result_id'],'--query','中文','--limit','1');assert search['matches'] and search['next_offset']>0
         check('Unicode result pagination/search and tiny search budget')
+        reply_path = root / 'full-reply.txt'
+        retrieved = raw('tool', 'self', '--background', 'download', text['result_id'], reply_path)
+        reply_bytes = reply_path.read_bytes()
+        assert len(reply_bytes) > 48 * 1024 and len(reply_bytes.decode('utf-8')) == text['total_chars']
+        assert hashlib.sha256(reply_bytes).hexdigest() == text['sha256'] == retrieved['sha256']
+        assert text['source_truncated'] is False and 'data' not in retrieved
+        check('complete Unicode reply downloaded across multiple chunks with verified SHA256')
         artifact=action('screenshot',tab)['result'];path=root/'screen.jpg'
         downloaded=raw('tool','self','--background','download',artifact['result_id'],path)
         assert hashlib.sha256(path.read_bytes()).hexdigest()==artifact['sha256']==downloaded['sha256'] and path.read_bytes()[:2]==b'\xff\xd8'
@@ -116,9 +123,16 @@ def main():
         for argv in cleanup:
             try:raw(*argv,success=False)
             except Exception:pass
-        server.shutdown();time.sleep(.5)
-        try:directory.cleanup()
-        except PermissionError:print('Test profile still closing: '+str(root))
+        server.shutdown()
+        # Windows 上浏览器退出后，测试配置中的文件句柄可能还需要一点时间释放。
+        for attempt in range(6):
+            try:
+                directory.cleanup()
+                break
+            except OSError:
+                if attempt == 5:
+                    raise
+                time.sleep(1)
 
 def desktop_test(raw,root,check):
     fixture='''Add-Type -AssemblyName System.Windows.Forms

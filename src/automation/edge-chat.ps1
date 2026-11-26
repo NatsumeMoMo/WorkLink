@@ -114,6 +114,28 @@ function Edge-DocumentAddress($document) {
     }
 }
 
+function Edge-RequestedDocument($root, [string]$path, [string]$fragment) {
+    $documents = @(Edge-Typed $root ([Windows.Automation.ControlType]::Document))
+    # Chromium 也会暴露后台标签的文档。按新标签的地址标记定位，不能取第一个 Document。
+    foreach ($document in $documents) {
+        try {
+            $address = Edge-DocumentAddress $document
+            if ($address -and $address.AbsolutePath -eq $path -and $address.Fragment -ceq $fragment) {
+                return $document
+            }
+        } catch [Windows.Automation.ElementNotAvailableException] {}
+    }
+    # 某些版本的文档 URL 省略片段，只有活动内容容器中的同路径文档可以回退使用。
+    $view = $root.FindFirst($edgeScope, [Windows.Automation.PropertyCondition]::new(
+        [Windows.Automation.AutomationElement]::ClassNameProperty, 'MultiContentsView'))
+    if (!$view) { return }
+    $found = @(foreach ($document in (Edge-Typed $view ([Windows.Automation.ControlType]::Document))) {
+        $address = Edge-DocumentAddress $document
+        if ($address -and $address.AbsolutePath -eq $path -and !$address.Fragment) { $document }
+    })
+    if ($found.Count -eq 1) { return $found[0] }
+}
+
 function Edge-ModelMatches([string]$actual, [string]$requested) {
     if ($actual.Trim() -eq $requested.Trim()) { return $true }
     $label = $actual -replace '^(?:GPT[- ]?)?[0-9]+(?:\.[0-9]+)*\s+', ''
@@ -233,10 +255,9 @@ function Edge-Prepare($request) {
         $address = Edge-Address $root
         if (!$address -or $address.Fragment -cne $fragment -or $address.AbsolutePath -ne $path) { continue }
         $tab = Edge-SelectedTab $root
-        $doc = Edge-ChatDocument $root
-        if (!$tab -or $tab -ceq $previousTab -or !$doc) { continue }
-        $documentAddress = Edge-DocumentAddress $doc
-        if (!$documentAddress -or $documentAddress.AbsolutePath -ne $path) { continue }
+        if (!$tab -or $tab -ceq $previousTab) { continue }
+        $doc = Edge-RequestedDocument $root $path $fragment
+        if (!$doc) { continue }
         if (@(Edge-Named $doc $edgeAccount).Count -gt 0) {
             throw 'edge_login_required: 请在这台电脑的普通 Edge 中登录 ChatGPT'
         }
@@ -256,7 +277,7 @@ function Edge-Prepare($request) {
     $model = Edge-SelectModel $doc $picker $request.model
     if (!$model) { throw 'edge_model_unverified: 网页未显示当前模型' }
     $script:edgeChatTask = @{
-        window = $target.handle; tab = $tab; path = $path; fragment = $fragment;
+        window = $target.handle; tab = $tab; doc = $doc; path = $path; fragment = $fragment;
         model = $model; userCount = @(Edge-UserHeadings $doc).Count; stable = 0; lastAnswer = $null
     }
     return @{ window = $target.handle; model = $model }
@@ -267,8 +288,7 @@ function Edge-Context([bool]$preparing) {
     $task = $script:edgeChatTask
     $root = Window $task.window
     if ((Edge-SelectedTab $root) -cne $task.tab) { throw 'edge_tab_changed: Edge 当前标签已切换，请先确认原问题状态' }
-    $doc = Edge-ChatDocument $root
-    if (!$doc) { throw 'edge_document_unavailable: 找不到原标签中的 ChatGPT 页面' }
+    $doc = $task.doc
     # 后台窗口的地址栏可能保留旧 URL。用文档的实际 URL 识别 ChatGPT 的单页导航。
     $address = Edge-DocumentAddress $doc
     if (!$address) { throw 'edge_tab_changed: 原标签已离开 ChatGPT，或文档未提供地址' }

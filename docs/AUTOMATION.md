@@ -79,10 +79,10 @@ $id = [guid]::NewGuid().ToString()
 
 - `edge_window_ambiguous` 会返回候选窗口句柄。用 `desktop A windows` 核对窗口，再显式传 `--window <句柄>`。若 Edge 把新标签交给同一配置的另一个窗口，请激活目标窗口后重试。
 - 继续对话须传 `--conversation <上次结果中的 conversation>`，新标签内打开这个对话。现有草稿、已在生成的回答和提交前变更的标签会阻止发送。
-- 等待期间保持任务的 ChatGPT 标签选中。结果包含发送时核实的 `model`、`conversation`、`window`、短文本预览和 `result_id`。只需结论时缩小 `--max-chars`，更多内容用 `tool A read <result_id> --offset <next_offset> --limit 1500`。
+- 等待期间保持任务的 ChatGPT 标签选中。结果包含发送时核实的 `model`、`conversation`、`window`、短文本预览和 `result_id`。Agent 在 `next_offset` 非空时可用 `tool A download <result_id> <本机UTF8文件>` 完整保存回复，或用 `tool A read <result_id> --offset <next_offset> --limit 1500` 分段读入。`source_truncated` 表示网页可读取文本触及上限。
 - 任务进入 `submission_started` 或 `waiting_for_answer` 后，断线、超时或取消时先查原 ID 和目标会话。相同 ID 与原参数对应同一任务，结果无法确认时避免换新 ID 重发。
 
-MCP 使用 `worklink_desktop`，例如 `{"device":"A","id":"<UUID>","timeout":900,"wait_ms":1000,"action":{"kind":"desktop_edge_ask","prompt":"请用三点概括","model":"Pro"}}`。后续用 `worklink_task` 查询和 `worklink_result` 分页读取。此入口通过 Windows UI Automation 操作网页，具体模型和控件能否识别取决于 ChatGPT 页面版本。
+MCP 使用 `worklink_desktop`，例如 `{"device":"A","id":"<UUID>","timeout":900,"wait_ms":1000,"action":{"kind":"desktop_edge_ask","prompt":"请分析给定的问题","model":"Pro"}}`。后续用 `worklink_task` 查询，`worklink_result` 可用 `download_path` 下载完整 UTF-8 文本，也可用 `offset` 分页读取。下载返回路径、大小和校验值，供 Agent 继续处理。此入口通过 Windows UI Automation 操作网页，具体模型和控件能否识别取决于 ChatGPT 页面版本。
 
 ## 桌面控件
 
