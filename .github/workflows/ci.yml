@@ -34,7 +34,7 @@ jobs:
         run: python scripts/test-automation.py --exe target/debug/WorkLink.exe --headless-only
       - name: Match Edge models and verify ChatGPT URLs
         shell: pwsh
-        run: ./scripts/test-edge-chat.ps1
+        run: powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-edge-chat.ps1
       - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
